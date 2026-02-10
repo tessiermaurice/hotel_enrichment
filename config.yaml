@@ -1,0 +1,35 @@
+# Hotel Enrichment Configuration
+# Edit these values to customize thresholds and keyword matching
+
+# Room count thresholds for size classification
+threshold_small_max: 30
+threshold_medium_max: 80
+threshold_boutique_max: 25
+threshold_large_rooms_min: 80
+threshold_large_capacity_min: 160
+
+# Restaurant keywords (case and accent insensitive)
+restaurant_keywords:
+  - restaurant
+  - brasserie
+  - bistro
+  - bistrot
+  - table
+  - auberge
+  - gourmand
+  - cuisine
+  - ristorante
+  - trattoria
+
+# Spa and wellness keywords (case and accent insensitive)
+spa_keywords:
+  - spa
+  - thalasso
+  - thalassotherapie
+  - balneo
+  - balneotherapie
+  - bien etre
+  - bien-etre
+  - wellness
+  - thermes
+  - thermal

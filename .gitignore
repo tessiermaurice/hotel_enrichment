@@ -1,1 +1,35 @@
-contacts_FINAL_*.csv 
+# Output files
+enriched_hotels.csv
+enriched_hotels.xlsx
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data
+test_*.csv
+test_*.xlsx
+*_test.csv
+*_test.xlsx
+
+# Backup files
+*.bak
+*.backup

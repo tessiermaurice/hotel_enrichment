@@ -1,0 +1,148 @@
+🚀 START HERE - COMPLETE SETUP GUIDE
+=====================================
+
+Hey! I know you said you have almost zero coding experience, so I made this SUPER simple.
+
+
+📦 WHAT YOU GOT
+---------------
+
+8 files that make a complete hotel enrichment system:
+
+1. enrich_hotels.py          ← The magic script
+2. config.yaml               ← Settings you can change
+3. department_to_region_fr.csv   ← Location lookup
+4. hotel_groups_domains.csv  ← Hotel chains list
+5. major_cities_fr.txt       ← City names
+6. README.md                 ← For GitHub
+7. README.txt                ← Detailed instructions
+8. .gitignore                ← Git config
+
+
+🎯 WHAT TO DO NOW (3 SIMPLE STEPS)
+-----------------------------------
+
+STEP 1: COPY FILES TO YOUR FOLDER
+----------------------------------
+
+Download all files from Claude and put them here:
+C:\Users\tessi\OneDrive\Documents\PRO\PROJECTS\hotel_enrichment
+
+Replace any old files if they exist.
+
+
+STEP 2: INSTALL PYTHON STUFF (ONE TIME)
+----------------------------------------
+
+Open Command Prompt and paste this:
+
+pip install pandas openpyxl tldextract unidecode pyyaml
+
+Hit Enter. Wait for it to finish (30 seconds).
+
+
+STEP 3: RUN THE SCRIPT
+----------------------
+
+Still in Command Prompt, type:
+
+cd C:\Users\tessi\OneDrive\Documents\PRO\PROJECTS\hotel_enrichment
+
+Then run it on your hotel file:
+
+python enrich_hotels.py contacts_FINAL_20260205_222438.csv
+
+(Or whatever your CSV file is called)
+
+
+💥 BOOM! YOU'LL GET:
+--------------------
+
+✓ enriched_hotels.csv   ← Your data with all new columns
+✓ enriched_hotels.xlsx  ← Same thing in Excel format
+✓ enrich_hotels.log     ← Summary of what happened
+
+
+🎨 NEW COLUMNS YOU'LL SEE:
+--------------------------
+
+Location:
+- department (like 75 for Paris)
+- region (like Île-de-France)
+
+Size:
+- capacity_range (petite/intermediaire/grande)
+- size_segment (small/medium/large)
+
+Features:
+- restaurant_flag (TRUE/FALSE)
+- spa_flag (TRUE/FALSE)
+
+Business Type:
+- hotel_domain (like accor.com)
+- independent_or_group (independent/group/unknown)
+- group_name (like "Accor" or "Marriott")
+
+Special Flags:
+- large_property_flag (TRUE if big hotel)
+- boutique_flag (TRUE if small + independent + fancy)
+- hotel_context (urbain/loisir/inconnu)
+
+
+🔧 WANT TO CUSTOMIZE?
+---------------------
+
+Edit config.yaml to change:
+- What counts as "small" vs "medium" vs "large"
+- Restaurant keywords
+- Spa keywords
+
+Edit hotel_groups_domains.csv to add more hotel chains.
+
+Edit major_cities_fr.txt to add more cities.
+
+
+📤 PUSH TO GITHUB (OPTIONAL BUT RECOMMENDED)
+--------------------------------------------
+
+See GIT_SETUP.txt for detailed instructions.
+
+Quick version:
+1. Open GitHub Desktop (easier than command line)
+2. Add your folder
+3. Click "Commit"
+4. Click "Push"
+
+Or use command line:
+git add .
+git commit -m "Complete hotel enrichment script"
+git push
+
+
+❓ NEED HELP?
+-------------
+
+Check README.txt for:
+- Full explanations of how it works
+- Troubleshooting common errors
+- Example usage
+
+Check enrich_hotels.log for:
+- What went wrong (if something fails)
+- Statistics about your data
+
+
+🎉 THAT'S IT!
+-------------
+
+Seriously, that's all there is to it.
+
+1. Install Python packages (once)
+2. Run: python enrich_hotels.py your_file.csv
+3. Get enriched files
+4. Use them for sales emails
+
+Questions? The log file will tell you what's happening.
+
+Now go make those sales! 💰
+

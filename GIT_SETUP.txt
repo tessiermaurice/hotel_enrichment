@@ -1,0 +1,120 @@
+GIT SETUP INSTRUCTIONS FOR NON-CODERS
+======================================
+
+STEP 1: NAVIGATE TO YOUR PROJECT FOLDER
+----------------------------------------
+
+Open Command Prompt (Windows) or Terminal (Mac) and type:
+
+cd C:\Users\tessi\OneDrive\Documents\PRO\PROJECTS\hotel_enrichment
+
+Hit Enter.
+
+
+STEP 2: COPY THE NEW FILES
+---------------------------
+
+I've created these files for you:
+- enrich_hotels.py (main script)
+- config.yaml (settings)
+- department_to_region_fr.csv (lookup table)
+- hotel_groups_domains.csv (hotel chains)
+- major_cities_fr.txt (city list)
+- README.md (GitHub description)
+- README.txt (detailed instructions)
+- .gitignore (tells git what to ignore)
+
+Download them from Claude and put them in your hotel_enrichment folder.
+
+
+STEP 3: SETUP GIT (IF NOT ALREADY DONE)
+----------------------------------------
+
+Check if git is installed:
+
+git --version
+
+If you get an error, download Git from: https://git-scm.com/downloads
+
+
+STEP 4: INITIALIZE GIT (IF FIRST TIME)
+---------------------------------------
+
+If you haven't set up git in this folder yet:
+
+git init
+git remote add origin https://github.com/tessiermaurice/hotel_enrichment.git
+
+
+STEP 5: PUSH YOUR FILES TO GITHUB
+----------------------------------
+
+Copy and paste these commands one by one:
+
+1. Add all files:
+   git add .
+
+2. Commit (save) the files:
+   git commit -m "Complete hotel enrichment script with all features"
+
+3. Push to GitHub:
+   git push -u origin main
+
+   (If it asks for "master" instead of "main", use: git push -u origin master)
+
+
+THAT'S IT!
+----------
+
+Your files are now on GitHub at:
+https://github.com/tessiermaurice/hotel_enrichment
+
+
+IF YOU GET ERRORS
+-----------------
+
+ERROR: "fatal: not a git repository"
+→ Run: git init
+
+ERROR: "fatal: remote origin already exists"
+→ Run: git remote remove origin
+→ Then: git remote add origin https://github.com/tessiermaurice/hotel_enrichment.git
+
+ERROR: Permission denied / authentication failed
+→ You need to set up GitHub authentication
+→ Easiest way: GitHub Desktop (https://desktop.github.com/)
+→ Or: Set up a Personal Access Token
+
+
+ALTERNATIVE: USE GITHUB DESKTOP (EASIER!)
+------------------------------------------
+
+1. Download GitHub Desktop: https://desktop.github.com/
+2. Sign in with your GitHub account
+3. Click "Add" → "Add Existing Repository"
+4. Choose your folder: C:\Users\tessi\OneDrive\Documents\PRO\PROJECTS\hotel_enrichment
+5. Click "Publish repository" or "Push origin"
+
+Done! Much easier than command line.
+
+
+FUTURE UPDATES
+--------------
+
+Whenever you change a file:
+
+1. git add .
+2. git commit -m "Description of what you changed"
+3. git push
+
+Or just use GitHub Desktop and click "Commit" then "Push".
+
+
+QUICK REFERENCE
+---------------
+
+See what changed:        git status
+See commit history:      git log
+Undo changes:           git checkout -- filename
+Pull latest from GitHub: git pull
+
