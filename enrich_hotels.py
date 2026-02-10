@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hotel Enrichment Script
+Hotel Enrichment Script V2 - French Personalization Edition
 Adds personalization columns to French hotel database for sales outreach
 """
 
@@ -9,6 +9,7 @@ import yaml
 import sys
 import os
 import logging
+import re
 from pathlib import Path
 from unidecode import unidecode
 import tldextract
@@ -135,36 +136,61 @@ def load_lookup_file(file_path, key_col, value_col):
         return {}
 
 
-def load_text_list(file_path):
-    """Load a text file as a list (one item per line)"""
+def load_department_lookup(file_path):
+    """Load department lookup with both code->name and code->region mappings"""
     try:
         if not os.path.exists(file_path):
-            logging.warning(f"[WARN] List file not found: {file_path}")
-            return []
+            logging.warning(f"[WARN] Department lookup file not found: {file_path}")
+            return {}, {}
         
-        with open(file_path, 'r', encoding='utf-8') as f:
-            items = [line.strip().lower() for line in f if line.strip()]
+        df = pd.read_csv(file_path, dtype=str)
+        df.columns = df.columns.str.strip()
         
-        logging.info(f"[OK] Loaded {len(items)} items from {file_path}")
-        return items
+        # Create two mappings
+        code_to_name = {}
+        code_to_region = {}
+        
+        if 'department' in df.columns and 'department_name' in df.columns and 'region' in df.columns:
+            for _, row in df.iterrows():
+                code = str(row['department']).strip()
+                code_to_name[code] = str(row['department_name']).strip()
+                code_to_region[code] = str(row['region']).strip()
+        
+        logging.info(f"[OK] Loaded {len(code_to_name)} department mappings")
+        return code_to_name, code_to_region
     
     except Exception as e:
-        logging.warning(f"[WARN] Failed to load {file_path}: {e}")
-        return []
+        logging.warning(f"[WARN] Failed to load department lookup: {e}")
+        return {}, {}
 
 
-def extract_department(postal_code):
-    """Extract department code from French postal code"""
+def clean_postal_code(postal_code):
+    """Clean postal code - remove decimals and ensure it's a proper 5-digit string"""
     if pd.isna(postal_code):
         return ''
     
-    postal_code = str(postal_code).strip()
+    # Convert to string and remove any decimal points
+    postal_str = str(postal_code).strip()
     
-    # Must be 5 digits
-    if not postal_code.isdigit() or len(postal_code) != 5:
+    # Remove .0 suffix if present
+    if '.' in postal_str:
+        postal_str = postal_str.split('.')[0]
+    
+    # Pad with leading zeros if needed (in case it's stored as integer and lost leading zeros)
+    if postal_str.isdigit() and len(postal_str) < 5:
+        postal_str = postal_str.zfill(5)
+    
+    return postal_str
+
+
+def extract_department_code(postal_code):
+    """Extract department code from French postal code"""
+    postal_code = clean_postal_code(postal_code)
+    
+    if not postal_code or len(postal_code) != 5 or not postal_code.isdigit():
         return ''
     
-    # Overseas departments (97x, 98x)
+    # Overseas departments (97x, 98x) - use first 3 digits
     if postal_code.startswith('97') or postal_code.startswith('98'):
         return postal_code[:3]
     
@@ -180,6 +206,134 @@ def extract_department(postal_code):
     
     # Standard case: first 2 digits
     return postal_code[:2]
+
+
+def to_proper_case(text):
+    """Convert text to proper case, handling French articles and prepositions"""
+    if pd.isna(text) or not text:
+        return ''
+    
+    text = str(text).strip()
+    
+    # List of words that should stay lowercase (French articles and prepositions)
+    lowercase_words = {
+        'le', 'la', 'les', 'l', 'de', 'des', 'du', 'd', 'et', 'à', 'au', 'aux',
+        'en', 'un', 'une', 'sur', 'sous', 'pour', 'par', 'avec', 'sans'
+    }
+    
+    words = text.split()
+    result = []
+    
+    for i, word in enumerate(words):
+        # First word is always capitalized
+        if i == 0:
+            result.append(word.capitalize())
+        # Check if word (without punctuation) is in lowercase list
+        elif word.lower().strip('.,;:!?()[]{}"\'-') in lowercase_words:
+            result.append(word.lower())
+        else:
+            result.append(word.capitalize())
+    
+    return ' '.join(result)
+
+
+def clean_hotel_name(name):
+    """
+    Clean hotel name by removing prefixes, legal suffixes, and chain names.
+    This is the TRICKY part - we want ONLY the actual hotel name.
+    
+    Examples:
+    - "Palace Hôtel Spa Le Beaumarchais SAS" -> "Le Beaumarchais"
+    - "Camping aux 3 flots SARL" -> "Aux 3 Flots"
+    - "Résidence Pierre et Vacances Les Terrasses" -> "Les Terrasses"
+    """
+    if pd.isna(name) or not name:
+        return ''
+    
+    name = str(name).strip()
+    
+    # STEP 1: Remove legal suffixes (SAS, SARL, etc.)
+    legal_suffixes = [
+        r'\bSAS\b', r'\bSARL\b', r'\bSA\b', r'\bSNC\b', r'\bEURL\b', 
+        r'\bSCI\b', r'\bSCM\b', r'\bSCP\b', r'\bSELARL\b', r'\bSEL\b',
+        r'\bLtd\b', r'\bLLC\b', r'\bInc\b', r'\bCorp\b', r'\bGmbH\b'
+    ]
+    
+    for suffix in legal_suffixes:
+        name = re.sub(suffix, '', name, flags=re.IGNORECASE)
+    
+    # STEP 2: Remove common hotel/accommodation type prefixes
+    type_prefixes = [
+        r'\bHôtel\b', r'\bHotel\b', r'\bHotêl\b',  # Common misspellings
+        r'\bPalace\b',
+        r'\bCamping\b', r'\bCamp\b',
+        r'\bRésidence\b', r'\bResidence\b',
+        r'\bVillage\b',
+        r'\bAppart\'?hôtel\b', r'\bApparthotel\b', r'\bAppart\'?hotel\b',
+        r'\bAuberge\b',
+        r'\bRelais\b',
+        r'\bManoir\b',
+        r'\bChâteau\b', r'\bChateau\b',
+        r'\bMaison\b',
+        r'\bDomaine\b',
+        r'\bGîte\b', r'\bGite\b',
+        r'\bLodge\b',
+        r'\bHostel\b', r'\bHostellerie\b'
+    ]
+    
+    for prefix in type_prefixes:
+        name = re.sub(prefix, '', name, flags=re.IGNORECASE)
+    
+    # STEP 3: Remove amenity-related words
+    amenity_words = [
+        r'\bRestaurant\b', r'\bBrasserie\b', r'\bBistro\b', r'\bBistrot\b',
+        r'\bSpa\b', r'\bThalasso\b', r'\bWellness\b', r'\bThermes\b',
+        r'\bGolf\b', r'\bResort\b',
+        r'\bBar\b', r'\bCafé\b', r'\bCafe\b',
+        r'\bClub\b'
+    ]
+    
+    for word in amenity_words:
+        name = re.sub(word, '', name, flags=re.IGNORECASE)
+    
+    # STEP 4: Remove common chain/brand names
+    # This is important to get ONLY the hotel's actual name
+    chain_names = [
+        r'\bPierre\s+et\s+Vacances\b', r'\bPierre\s+&\s+Vacances\b',
+        r'\bBelambra\b', r'\bVVF\b', r'\bVacancéole\b', r'\bVacanceole\b',
+        r'\bOdalys\b', r'\bLagrange\b', r'\bNemea\b', r'\bGoélia\b', r'\bGoelia\b',
+        r'\bMaeva\b', r'\bLes\s+Balcons\b', r'\bLa\s+Plagne\b',
+        r'\bCenter\s+Parcs\b', r'\bSunêlia\b', r'\bSunelia\b',
+        r'\bYelloh\s+Village\b', r'\bCastels\b', r'\bSandaya\b',
+        r'\bHomair\b', r'\bEurocamp\b', r'\bCanvas\b',
+        # Big hotel chains (just in case they appear in name)
+        r'\bAccor\b', r'\bIbis\b', r'\bNovotel\b', r'\bMercure\b', r'\bSofitel\b',
+        r'\bCampanile\b', r'\bKyriad\b', r'\bPremiere\s+Classe\b', r'\bB&B\s+Hotels\b',
+        r'\bBest\s+Western\b', r'\bHoliday\s+Inn\b', r'\bMarriott\b', r'\bHilton\b'
+    ]
+    
+    for chain in chain_names:
+        name = re.sub(chain, '', name, flags=re.IGNORECASE)
+    
+    # STEP 5: Remove star ratings if present
+    name = re.sub(r'\b\d+\s*étoiles?\b', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\b\d+\s*stars?\b', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\*+', '', name)
+    
+    # STEP 6: Clean up extra whitespace and punctuation
+    name = re.sub(r'\s+', ' ', name)  # Multiple spaces to single space
+    name = re.sub(r'^[\s\-,;:]+', '', name)  # Leading punctuation
+    name = re.sub(r'[\s\-,;:]+$', '', name)  # Trailing punctuation
+    name = name.strip()
+    
+    # STEP 7: If name is empty after cleaning, return original (better than nothing)
+    if not name:
+        return ''
+    
+    # STEP 8: Convert to proper case
+    name = to_proper_case(name)
+    
+    return name
 
 
 def normalize_text(text):
@@ -209,7 +363,7 @@ def extract_domain(url):
         return ''
 
 
-def enrich_hotels(df, config, dept_to_region, group_domains, major_cities):
+def enrich_hotels(df, config, dept_to_name, dept_to_region, group_domains):
     """Main enrichment function - adds all new columns"""
     
     initial_count = len(df)
@@ -217,9 +371,10 @@ def enrich_hotels(df, config, dept_to_region, group_domains, major_cities):
     
     # ===== DATA CLEANING =====
     
-    # Clean CODE POSTAL (keep as string to preserve leading zeros)
-    df['CODE POSTAL'] = df['CODE POSTAL'].astype(str).str.strip()
-    df.loc[df['CODE POSTAL'] == 'nan', 'CODE POSTAL'] = ''
+    logging.info("Cleaning data...")
+    
+    # Clean CODE POSTAL - CRITICAL FIX for the .0 issue
+    df['CODE POSTAL_cleaned'] = df['CODE POSTAL'].apply(clean_postal_code)
     
     # Clean STAR
     df['STAR_numeric'] = pd.to_numeric(df['STAR'], errors='coerce')
@@ -228,10 +383,6 @@ def enrich_hotels(df, config, dept_to_region, group_domains, major_cities):
     df['NOMBRE DE CHAMBRES_int'] = pd.to_numeric(df['NOMBRE DE CHAMBRES'], errors='coerce').fillna(0).astype(int)
     df.loc[df['NOMBRE DE CHAMBRES_int'] == 0, 'NOMBRE DE CHAMBRES_int'] = None
     
-    # Clean CAPACITÉ D'ACCUEIL
-    df['CAPACITÉ D\'ACCUEIL (PERSONNES)_int'] = pd.to_numeric(df['CAPACITÉ D\'ACCUEIL (PERSONNES)'], errors='coerce').fillna(0).astype(int)
-    df.loc[df['CAPACITÉ D\'ACCUEIL (PERSONNES)_int'] == 0, 'CAPACITÉ D\'ACCUEIL (PERSONNES)_int'] = None
-    
     # Clean NOM COMMERCIAL
     df['NOM COMMERCIAL'] = df['NOM COMMERCIAL'].fillna('').astype(str)
     
@@ -239,180 +390,110 @@ def enrich_hotels(df, config, dept_to_region, group_domains, major_cities):
     df['WEBSITE'] = df['WEBSITE'].astype(str).str.strip()
     df.loc[df['WEBSITE'] == 'nan', 'WEBSITE'] = ''
     
-    # Clean COMMUNE
-    df['COMMUNE'] = df['COMMUNE'].fillna('').astype(str).str.strip().str.lower()
-    
     # Clean TYPE D'HÉBERGEMENT
     df['TYPE D\'HÉBERGEMENT'] = df['TYPE D\'HÉBERGEMENT'].fillna('').astype(str)
     
-    # ===== A. LOCATION =====
+    # ===== 1. HOTEL NAME (CLEANED) =====
+    
+    logging.info("Cleaning hotel names...")
+    df['nom_hotel'] = df['NOM COMMERCIAL'].apply(clean_hotel_name)
+    
+    # ===== 2. LOCATION (CODE DEPARTEMENT, DEPARTEMENT NAME, REGION) =====
     
     logging.info("Adding location columns...")
-    df['department'] = df['CODE POSTAL'].apply(extract_department)
-    df['region'] = df['department'].map(dept_to_region).fillna('')
     
-    valid_postal = (df['department'] != '').sum()
+    # Extract department code
+    df['code_departement'] = df['CODE POSTAL_cleaned'].apply(extract_department_code)
+    
+    # Map to department name
+    df['departement'] = df['code_departement'].map(dept_to_name).fillna('')
+    
+    # Map to region
+    df['region'] = df['code_departement'].map(dept_to_region).fillna('')
+    
+    valid_postal = (df['code_departement'] != '').sum()
     logging.info(f"  Valid postal codes: {valid_postal}/{initial_count}")
     
-    # ===== B. SIZE AND CAPACITY =====
+    # ===== 3. TYPE (from TYPE D'HÉBERGEMENT) =====
     
-    logging.info("Adding size columns...")
+    logging.info("Adding type column...")
+    df['type'] = df['TYPE D\'HÉBERGEMENT'].fillna('')
     
-    def get_capacity_range(rooms):
+    # ===== 4. TAILLE (SIZE in French) =====
+    
+    logging.info("Adding size column...")
+    
+    def get_taille(rooms):
         if pd.isna(rooms) or rooms == 0:
-            return ''
+            return '0'
         if rooms <= config['threshold_small_max']:
             return 'petite'
         elif rooms <= config['threshold_medium_max']:
-            return 'intermediaire'
+            return 'intermédiaire'
         else:
             return 'grande'
     
-    def get_size_segment(rooms):
-        if pd.isna(rooms) or rooms == 0:
-            return ''
-        if rooms <= config['threshold_small_max']:
-            return 'small'
-        elif rooms <= config['threshold_medium_max']:
-            return 'medium'
-        else:
-            return 'large'
+    df['taille'] = df['NOMBRE DE CHAMBRES_int'].apply(get_taille)
     
-    df['capacity_range'] = df['NOMBRE DE CHAMBRES_int'].apply(get_capacity_range)
-    df['size_segment'] = df['NOMBRE DE CHAMBRES_int'].apply(get_size_segment)
-    
-    # ===== C. AMENITIES =====
-    
-    logging.info("Adding amenity flags...")
-    
-    # Normalize keywords
-    restaurant_keywords = [normalize_text(kw) for kw in config['restaurant_keywords']]
-    spa_keywords = [normalize_text(kw) for kw in config['spa_keywords']]
-    
-    df['restaurant_flag'] = df['NOM COMMERCIAL'].apply(lambda x: contains_keywords(x, restaurant_keywords))
-    df['spa_flag'] = df['NOM COMMERCIAL'].apply(lambda x: contains_keywords(x, spa_keywords))
-    
-    restaurant_count = df['restaurant_flag'].sum()
-    spa_count = df['spa_flag'].sum()
-    logging.info(f"  Restaurant mentions: {restaurant_count}")
-    logging.info(f"  Spa mentions: {spa_count}")
-    
-    # ===== D. GROUP VS INDEPENDENT =====
+    # ===== 5. STATUT (independent/group in French) =====
     
     logging.info("Adding group/independent classification...")
     
     df['hotel_domain'] = df['WEBSITE'].apply(extract_domain)
     
-    def classify_hotel(domain):
+    def classify_statut(domain):
         if not domain or domain == '':
-            return 'unknown'
+            return '0'
         if domain in group_domains:
-            return 'group'
-        return 'independent'
+            return 'groupe'
+        return 'indépendant'
     
-    df['independent_or_group'] = df['hotel_domain'].apply(classify_hotel)
-    df['group_name'] = df['hotel_domain'].map(group_domains).fillna('')
+    df['statut'] = df['hotel_domain'].apply(classify_statut)
     
-    group_count = (df['independent_or_group'] == 'group').sum()
-    independent_count = (df['independent_or_group'] == 'independent').sum()
-    unknown_count = (df['independent_or_group'] == 'unknown').sum()
+    # ===== 6. GROUPE (group name or 0) =====
+    
+    df['groupe'] = df['hotel_domain'].map(group_domains).fillna('0')
+    
+    group_count = (df['statut'] == 'groupe').sum()
+    independent_count = (df['statut'] == 'indépendant').sum()
+    unknown_count = (df['statut'] == '0').sum()
     
     logging.info(f"  Groups: {group_count}")
     logging.info(f"  Independent: {independent_count}")
     logging.info(f"  Unknown: {unknown_count}")
     
-    # ===== E. POSITIONING FLAGS =====
+    # ===== 7. RESTAURANT (restaurant or 0) =====
     
-    logging.info("Adding positioning flags...")
-    
-    def is_large_property(row):
-        rooms = row['NOMBRE DE CHAMBRES_int']
-        capacity = row['CAPACITÉ D\'ACCUEIL (PERSONNES)_int']
-        
-        if pd.isna(rooms) and pd.isna(capacity):
-            return False
-        
-        if not pd.isna(rooms) and rooms > config['threshold_large_rooms_min']:
-            return True
-        if not pd.isna(capacity) and capacity > config['threshold_large_capacity_min']:
-            return True
-        
-        return False
-    
-    def is_boutique(row):
-        if row['independent_or_group'] != 'independent':
-            return False
-        
-        rooms = row['NOMBRE DE CHAMBRES_int']
-        if pd.isna(rooms):
-            return False
-        
-        if rooms > config['threshold_boutique_max']:
-            return False
-        
-        star = row['STAR_numeric']
-        if pd.isna(star):
-            # If STAR missing, ignore STAR rule
-            return True
-        
-        return star >= 3
-    
-    df['large_property_flag'] = df.apply(is_large_property, axis=1)
-    df['boutique_flag'] = df.apply(is_boutique, axis=1)
-    
-    large_count = df['large_property_flag'].sum()
-    boutique_count = df['boutique_flag'].sum()
-    
-    logging.info(f"  Large properties: {large_count}")
-    logging.info(f"  Boutique hotels: {boutique_count}")
-    
-    # ===== F. CONTEXT =====
-    
-    logging.info("Adding hotel context...")
+    logging.info("Adding amenity columns...")
     
     # Normalize keywords
-    leisure_type_keywords = ['camping', 'residence', 'village']
-    urban_name_keywords = ['aeroport', 'gare', 'centre ville', 'city']
-    leisure_name_keywords = ['plage', 'mer', 'montagne', 'ski', 'lac', 'golf', 'domaine', 'resort']
+    restaurant_keywords = [normalize_text(kw) for kw in config['restaurant_keywords']]
+    spa_keywords = [normalize_text(kw) for kw in config['spa_keywords']]
     
-    def get_context(row):
-        type_hebergement = normalize_text(row['TYPE D\'HÉBERGEMENT'])
-        nom = normalize_text(row['NOM COMMERCIAL'])
-        commune = row['COMMUNE']
-        
-        # Check type
-        if any(kw in type_hebergement for kw in leisure_type_keywords):
-            return 'loisir'
-        
-        # Check name for urban
-        if any(kw in nom for kw in urban_name_keywords):
-            return 'urbain'
-        
-        # Check name for leisure
-        if any(kw in nom for kw in leisure_name_keywords):
-            return 'loisir'
-        
-        # Check if commune is major city
-        if commune in major_cities:
-            return 'urbain'
-        
-        return 'inconnu'
+    df['restaurant_flag_temp'] = df['NOM COMMERCIAL'].apply(lambda x: contains_keywords(x, restaurant_keywords))
+    df['restaurant'] = df['restaurant_flag_temp'].apply(lambda x: 'restaurant' if x else '0')
     
-    df['hotel_context'] = df.apply(get_context, axis=1)
+    # ===== 8. SPA (spa or 0) =====
     
-    urbain_count = (df['hotel_context'] == 'urbain').sum()
-    loisir_count = (df['hotel_context'] == 'loisir').sum()
-    inconnu_count = (df['hotel_context'] == 'inconnu').sum()
+    df['spa_flag_temp'] = df['NOM COMMERCIAL'].apply(lambda x: contains_keywords(x, spa_keywords))
+    df['spa'] = df['spa_flag_temp'].apply(lambda x: 'spa' if x else '0')
     
-    logging.info(f"  Urban: {urbain_count}")
-    logging.info(f"  Leisure: {loisir_count}")
-    logging.info(f"  Unknown: {inconnu_count}")
+    restaurant_count = (df['restaurant'] == 'restaurant').sum()
+    spa_count = (df['spa'] == 'spa').sum()
     
-    # ===== CLEANUP =====
+    logging.info(f"  Restaurant mentions: {restaurant_count}")
+    logging.info(f"  Spa mentions: {spa_count}")
     
-    # Remove temporary columns
-    df = df.drop(columns=['STAR_numeric', 'NOMBRE DE CHAMBRES_int', 
-                          'CAPACITÉ D\'ACCUEIL (PERSONNES)_int', 'COMMUNE'])
+    # ===== CLEANUP TEMPORARY COLUMNS =====
+    
+    columns_to_drop = [
+        'CODE POSTAL_cleaned', 'STAR_numeric', 'NOMBRE DE CHAMBRES_int',
+        'hotel_domain', 'restaurant_flag_temp', 'spa_flag_temp'
+    ]
+    
+    df = df.drop(columns=columns_to_drop)
+    
+    # ===== VERIFY ROW COUNT =====
     
     final_count = len(df)
     if final_count != initial_count:
@@ -459,25 +540,28 @@ def print_summary(df, log_path, csv_path, xlsx_path):
 ENRICHMENT SUMMARY
 {'='*60}
 Total rows: {len(df)}
-Valid postal codes: {(df['department'] != '').sum()}
+Valid postal codes: {(df['code_departement'] != '').sum()}
+
+LOCATION:
+  Departments identified: {df['departement'].ne('').sum()}
+  Regions identified: {df['region'].ne('').sum()}
+
+HOTEL NAMES:
+  Names cleaned: {df['nom_hotel'].ne('').sum()}
 
 GROUP CLASSIFICATION:
-  Groups: {(df['independent_or_group'] == 'group').sum()}
-  Independent: {(df['independent_or_group'] == 'independent').sum()}
-  Unknown: {(df['independent_or_group'] == 'unknown').sum()}
+  Groups: {(df['statut'] == 'groupe').sum()}
+  Independent: {(df['statut'] == 'indépendant').sum()}
+  Unknown: {(df['statut'] == '0').sum()}
+
+SIZE:
+  Petite: {(df['taille'] == 'petite').sum()}
+  Intermédiaire: {(df['taille'] == 'intermédiaire').sum()}
+  Grande: {(df['taille'] == 'grande').sum()}
 
 AMENITIES:
-  Restaurant mentions: {df['restaurant_flag'].sum()}
-  Spa mentions: {df['spa_flag'].sum()}
-
-POSITIONING:
-  Boutique hotels: {df['boutique_flag'].sum()}
-  Large properties: {df['large_property_flag'].sum()}
-
-CONTEXT:
-  Urban: {(df['hotel_context'] == 'urbain').sum()}
-  Leisure: {(df['hotel_context'] == 'loisir').sum()}
-  Unknown: {(df['hotel_context'] == 'inconnu').sum()}
+  With restaurant: {(df['restaurant'] == 'restaurant').sum()}
+  With spa: {(df['spa'] == 'spa').sum()}
 
 OUTPUT FILES:
   CSV: {csv_path}
@@ -492,7 +576,7 @@ OUTPUT FILES:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Enrich French hotel database with personalization columns'
+        description='Enrich French hotel database with personalization columns (French edition)'
     )
     parser.add_argument('input_file', help='Input CSV or XLSX file')
     parser.add_argument('--output_dir', default='.', help='Output directory (default: current dir)')
@@ -504,7 +588,7 @@ def main():
     log_path = setup_logging(args.output_dir)
     
     logging.info("="*60)
-    logging.info("HOTEL ENRICHMENT SCRIPT")
+    logging.info("HOTEL ENRICHMENT SCRIPT V2 - FRENCH EDITION")
     logging.info("="*60)
     
     # Load config
@@ -515,12 +599,11 @@ def main():
     validate_columns(df)
     
     # Load lookups
-    dept_to_region = load_lookup_file('department_to_region_fr.csv', 'department', 'region')
+    dept_to_name, dept_to_region = load_department_lookup('department_to_region_fr.csv')
     group_domains = load_lookup_file('hotel_groups_domains.csv', 'domain', 'group_name')
-    major_cities = load_text_list('major_cities_fr.txt')
     
     # Enrich
-    df_enriched = enrich_hotels(df, config, dept_to_region, group_domains, major_cities)
+    df_enriched = enrich_hotels(df, config, dept_to_name, dept_to_region, group_domains)
     
     # Save
     csv_path, xlsx_path = save_outputs(df_enriched, args.output_dir)
