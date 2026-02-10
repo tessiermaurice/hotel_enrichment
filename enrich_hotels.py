@@ -22,10 +22,14 @@ def setup_logging(output_dir):
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_path, mode='w'),
-            logging.StreamHandler()
+            logging.FileHandler(log_path, mode='w', encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
         ]
     )
+    # Force UTF-8 for console output on Windows
+    if sys.stdout.encoding != 'utf-8':
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     return log_path
 
 
@@ -34,17 +38,17 @@ def load_config(config_path):
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-        logging.info(f"✓ Config loaded from {config_path}")
+        logging.info(f"[OK] Config loaded from {config_path}")
         return config
     except Exception as e:
-        logging.error(f"✗ Failed to load config: {e}")
+        logging.error(f"[ERROR] Failed to load config: {e}")
         sys.exit(1)
 
 
 def load_input_file(input_path):
     """Load CSV or XLSX file with intelligent encoding detection"""
     if not os.path.exists(input_path):
-        logging.error(f"✗ Input file not found: {input_path}")
+        logging.error(f"[ERROR] Input file not found: {input_path}")
         sys.exit(1)
     
     file_ext = os.path.splitext(input_path)[1].lower()
@@ -52,7 +56,7 @@ def load_input_file(input_path):
     try:
         if file_ext == '.xlsx':
             df = pd.read_excel(input_path, dtype=str)
-            logging.info(f"✓ Loaded XLSX file with {len(df)} rows")
+            logging.info(f"[OK] Loaded XLSX file with {len(df)} rows")
         elif file_ext == '.csv':
             # Try different encodings and delimiters
             encodings = ['utf-8', 'utf-8-sig', 'cp1252', 'latin-1']
@@ -65,7 +69,7 @@ def load_input_file(input_path):
                         df = pd.read_csv(input_path, encoding=encoding, sep=delimiter, dtype=str)
                         # Check if we got valid columns (more than 1 column means delimiter worked)
                         if len(df.columns) > 1:
-                            logging.info(f"✓ Loaded CSV with encoding={encoding}, delimiter='{delimiter}', {len(df)} rows")
+                            logging.info(f"[OK] Loaded CSV with encoding={encoding}, delimiter='{delimiter}', {len(df)} rows")
                             break
                     except:
                         continue
@@ -73,10 +77,10 @@ def load_input_file(input_path):
                     break
             
             if df is None or len(df.columns) == 1:
-                logging.error("✗ Failed to load CSV with any encoding/delimiter combination")
+                logging.error("[ERROR] Failed to load CSV with any encoding/delimiter combination")
                 sys.exit(1)
         else:
-            logging.error(f"✗ Unsupported file type: {file_ext}. Use .xlsx or .csv")
+            logging.error(f"[ERROR] Unsupported file type: {file_ext}. Use .xlsx or .csv")
             sys.exit(1)
         
         # Trim column names
@@ -84,7 +88,7 @@ def load_input_file(input_path):
         return df
     
     except Exception as e:
-        logging.error(f"✗ Failed to load input file: {e}")
+        logging.error(f"[ERROR] Failed to load input file: {e}")
         sys.exit(1)
 
 
@@ -101,33 +105,33 @@ def validate_columns(df):
     missing = [col for col in required_columns if col not in df.columns]
     
     if missing:
-        logging.error(f"✗ Missing required columns: {missing}")
+        logging.error(f"[ERROR] Missing required columns: {missing}")
         logging.error(f"Available columns: {list(df.columns)}")
         sys.exit(1)
     
-    logging.info("✓ All required columns present")
+    logging.info("[OK] All required columns present")
 
 
 def load_lookup_file(file_path, key_col, value_col):
     """Load a lookup CSV file into a dictionary"""
     try:
         if not os.path.exists(file_path):
-            logging.warning(f"⚠ Lookup file not found: {file_path}")
+            logging.warning(f"[WARN] Lookup file not found: {file_path}")
             return {}
         
         df = pd.read_csv(file_path, dtype=str)
         df.columns = df.columns.str.strip()
         
         if key_col not in df.columns or value_col not in df.columns:
-            logging.warning(f"⚠ Invalid columns in {file_path}")
+            logging.warning(f"[WARN] Invalid columns in {file_path}")
             return {}
         
         lookup = dict(zip(df[key_col].str.strip(), df[value_col].str.strip()))
-        logging.info(f"✓ Loaded {len(lookup)} entries from {file_path}")
+        logging.info(f"[OK] Loaded {len(lookup)} entries from {file_path}")
         return lookup
     
     except Exception as e:
-        logging.warning(f"⚠ Failed to load {file_path}: {e}")
+        logging.warning(f"[WARN] Failed to load {file_path}: {e}")
         return {}
 
 
@@ -135,17 +139,17 @@ def load_text_list(file_path):
     """Load a text file as a list (one item per line)"""
     try:
         if not os.path.exists(file_path):
-            logging.warning(f"⚠ List file not found: {file_path}")
+            logging.warning(f"[WARN] List file not found: {file_path}")
             return []
         
         with open(file_path, 'r', encoding='utf-8') as f:
             items = [line.strip().lower() for line in f if line.strip()]
         
-        logging.info(f"✓ Loaded {len(items)} items from {file_path}")
+        logging.info(f"[OK] Loaded {len(items)} items from {file_path}")
         return items
     
     except Exception as e:
-        logging.warning(f"⚠ Failed to load {file_path}: {e}")
+        logging.warning(f"[WARN] Failed to load {file_path}: {e}")
         return []
 
 
@@ -412,10 +416,10 @@ def enrich_hotels(df, config, dept_to_region, group_domains, major_cities):
     
     final_count = len(df)
     if final_count != initial_count:
-        logging.error(f"✗ ROW COUNT MISMATCH! Started with {initial_count}, ended with {final_count}")
+        logging.error(f"[ERROR] ROW COUNT MISMATCH! Started with {initial_count}, ended with {final_count}")
         sys.exit(1)
     
-    logging.info(f"✓ Enrichment complete. Row count verified: {final_count}")
+    logging.info(f"[OK] Enrichment complete. Row count verified: {final_count}")
     
     return df
 
@@ -428,12 +432,21 @@ def save_outputs(df, output_dir, base_name='enriched_hotels'):
     # Save CSV with UTF-8 BOM for Excel compatibility
     csv_path = os.path.join(output_dir, f'{base_name}.csv')
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    logging.info(f"✓ Saved CSV: {csv_path}")
+    logging.info(f"[OK] Saved CSV: {csv_path}")
+    
+    # Clean data for Excel (remove illegal characters)
+    df_excel = df.copy()
+    for col in df_excel.columns:
+        if df_excel[col].dtype == 'object':
+            # Remove illegal XML characters that Excel can't handle
+            df_excel[col] = df_excel[col].astype(str).apply(
+                lambda x: ''.join(char for char in x if ord(char) >= 32 or char in '\n\r\t') if x != 'nan' else ''
+            )
     
     # Save XLSX
     xlsx_path = os.path.join(output_dir, f'{base_name}.xlsx')
-    df.to_excel(xlsx_path, index=False, engine='openpyxl')
-    logging.info(f"✓ Saved XLSX: {xlsx_path}")
+    df_excel.to_excel(xlsx_path, index=False, engine='openpyxl')
+    logging.info(f"[OK] Saved XLSX: {xlsx_path}")
     
     return csv_path, xlsx_path
 
@@ -515,7 +528,7 @@ def main():
     # Summary
     print_summary(df_enriched, log_path, csv_path, xlsx_path)
     
-    logging.info("✓ All done!")
+    logging.info("[OK] All done!")
 
 
 if __name__ == '__main__':
