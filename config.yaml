@@ -1,0 +1,28 @@
+threshold_small_max: 30
+threshold_medium_max: 80
+threshold_boutique_max: 25
+threshold_large_rooms_min: 80
+threshold_large_capacity_min: 160
+
+restaurant_keywords:
+  - restaurant
+  - brasserie
+  - bistro
+  - bistrot
+  - table
+  - auberge
+  - gourmand
+  - cuisine
+  - ristorante
+  - trattoria
+
+spa_keywords:
+  - spa
+  - thalasso
+  - thalassotherapie
+  - balneo
+  - balneotherapie
+  - bien etre
+  - wellness
+  - thermes
+  - thermal
